@@ -76,7 +76,13 @@ def dump_all_metadata(
 
 
 # LEVEL 3
-
+def update_global_coverage(coverage_obj):
+    global global_coverage_map
+    for filename in coverage_obj.get_data().measured_files():
+        current_coverage_data = coverage_obj.get_data().lines(filename)
+        if current_coverage_data is not None:
+            current_coverage = set(current_coverage_data)
+            global_coverage_map = global_coverage_map.union(current_coverage)
 
 def execute_single_py_program(filepath: str):
     """Execute a single python program."""
@@ -96,12 +102,39 @@ def fuzz_source_program(
     start_generation = timer()
     program_id = uuid.uuid4().hex
     selected_gate_set = config_generation["gate_set"]
+
+    # # Adjust the fuzzer based on coverage feedback
+    # for gate in config_generation["gate_set"]:
+    #     gate_name = gate["name"] if isinstance(gate, dict) and "name" in gate else gate
+    #     if gate_name not in global_coverage_map:
+    #         # Increase the probability of selecting the uncovered gate
+    #         selected_gate_set.append(gate)
+
+    # if config_generation["gate_set_dropout"] is not None:
+    #     dropout = config_generation["gate_set_dropout"]
+    #     selected_gate_set = list(np.random.choice(
+    #         selected_gate_set,
+    #         size=int(len(selected_gate_set) * dropout),
+    #         replace=False))
+
     if config_generation["gate_set_dropout"] is not None:
-        dropout = config_generation["gate_set_dropout"]
-        selected_gate_set = list(np.random.choice(
-            selected_gate_set,
-            size=int(len(selected_gate_set) * dropout),
-            replace=False))
+        # Get the gates that haven't been covered yet
+        uncovered_gates = [gate for gate in selected_gate_set if gate["name"] not in global_coverage_map]
+
+        # If there are uncovered gates, prioritize them
+        if uncovered_gates:
+            dropout = config_generation["gate_set_dropout"] - 0.3
+            selected_gate_set = uncovered_gates + list(np.random.choice(
+                selected_gate_set,
+                size=int(len(selected_gate_set) * dropout),
+                replace=False))
+        else:
+            # If all gates have been covered, use the dropout mechanism
+            dropout = config_generation["gate_set_dropout"]
+            selected_gate_set = list(np.random.choice(
+                selected_gate_set,
+                size=int(len(selected_gate_set) * dropout),
+                replace=False))
 
     selected_optimizations = config_generation["optimizations"]
     if config_generation["optimizations_dropout"] is not None:
@@ -360,7 +393,7 @@ def produce_and_test_single_program_couple(config, generator):
     if config["track_coverage"]:
         coverage_obj.stop()
         coverage_obj.save()
-
+        update_global_coverage(coverage_obj)
 
 # LEVEL 2:
 
@@ -456,4 +489,5 @@ def qmtl(config_file):
 
 
 if __name__ == '__main__':
+    global_coverage_map = set()
     qmtl()

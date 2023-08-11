@@ -190,6 +190,7 @@ class QiskitFuzzer(Fuzzer):
 
         # on very small circuits some gates cannot be used because we do not
         # have enough qubits
+        # print(gate_set)
         compatible_gate_set = [
             g for g in gate_set if n_qubits >= g["n_bits"]]
 
